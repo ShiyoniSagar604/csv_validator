@@ -226,13 +226,43 @@ function isValidEmail(email: string): boolean {
 }
 
 /**
+ * Validates phone number format
+ * Accepts various formats: +1234567890, (123) 456-7890, 123-456-7890, 1234567890, etc.
+ * Must contain at least 10 digits
+ */
+function isValidPhoneNumber(phone: string): boolean {
+  if (!phone || phone.trim().length === 0) {
+    return false;
+  }
+  
+  const trimmedPhone = phone.trim();
+  
+  // Remove common phone number formatting characters
+  const digitsOnly = trimmedPhone.replace(/[\s\-\(\)\+\.]/g, '');
+  
+  // Must contain only digits (after removing formatting)
+  if (!/^\d+$/.test(digitsOnly)) {
+    return false;
+  }
+  
+  // Must have at least 10 digits (standard phone number length)
+  // Allow up to 15 digits (international format)
+  if (digitsOnly.length < 10 || digitsOnly.length > 15) {
+    return false;
+  }
+  
+  return true;
+}
+
+/**
  * Validates and cleans a CSV row
  * Returns cleaned row if valid, null if invalid
  */
 export function validateAndCleanRow(
   row: string[], 
   expectedColumns: number,
-  emailColumnIndex: number
+  emailColumnIndex: number,
+  phoneColumnIndex: number
 ): string[] | null {
   // Must have correct number of columns
   if (row.length !== expectedColumns) {
@@ -255,6 +285,17 @@ export function validateAndCleanRow(
     // Validate email after correction
     if (!isValidEmail(email)) {
       return null; // Invalid email, reject row
+    }
+  }
+  
+  // Validate phone number field (optional - if invalid, clear it but don't reject row)
+  if (phoneColumnIndex >= 0 && phoneColumnIndex < cleanedRow.length) {
+    const phone = cleanedRow[phoneColumnIndex];
+    
+    // If phone number exists but is invalid, clear it (make it empty)
+    // Don't reject the row - phone is optional
+    if (phone && phone.trim().length > 0 && !isValidPhoneNumber(phone)) {
+      cleanedRow[phoneColumnIndex] = ''; // Clear invalid phone number
     }
   }
   
@@ -351,6 +392,16 @@ export function validateAndCleanCSV(
     }
   }
   
+  // Find phone column index (look for columns containing "phone")
+  let phoneColumnIndex = -1;
+  for (let i = 0; i < expectedColumns.length; i++) {
+    const colName = expectedColumns[i].toLowerCase();
+    if (colName.includes('phone') || colName.includes('mobile') || colName.includes('contact')) {
+      phoneColumnIndex = i;
+      break;
+    }
+  }
+  
   // Clean headers (remove unnecessary quotes)
   const cleanedHeaders = headers.map(field => cleanField(field));
   
@@ -363,7 +414,7 @@ export function validateAndCleanCSV(
     const parsedRow = rows[i];
     
     // Validate and clean the row
-    const cleanedRow = validateAndCleanRow(parsedRow, expectedColumns.length, emailColumnIndex);
+    const cleanedRow = validateAndCleanRow(parsedRow, expectedColumns.length, emailColumnIndex, phoneColumnIndex);
     
     if (cleanedRow) {
       validRows.push(cleanedRow);
