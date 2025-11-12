@@ -112,6 +112,76 @@ function cleanField(field: string): string {
 }
 
 /**
+ * Auto-corrects common TLD typos in email domains
+ * Only fixes obvious typos, preserves valid domains
+ */
+function autoCorrectEmailDomain(email: string): string {
+  const trimmedEmail = email.trim();
+  
+  // Check if email has @ symbol
+  if (!trimmedEmail.includes('@')) {
+    return trimmedEmail;
+  }
+  
+  const [localPart, domain] = trimmedEmail.split('@');
+  
+  if (!domain || domain.length === 0) {
+    return trimmedEmail;
+  }
+  
+  // Common valid TLDs that should NOT be changed
+  const validTLDs = ['.co', '.io', '.org', '.net', '.edu', '.gov', '.mil', '.int', 
+                     '.uk', '.us', '.ca', '.au', '.in', '.de', '.fr', '.jp', '.cn'];
+  
+  // Extract TLD (last part after last dot)
+  const lastDotIndex = domain.lastIndexOf('.');
+  if (lastDotIndex === -1) {
+    return trimmedEmail;
+  }
+  
+  const tld = domain.substring(lastDotIndex);
+  const baseDomain = domain.substring(0, lastDotIndex);
+  
+  // If it's a valid TLD, don't change it
+  if (validTLDs.includes(tld.toLowerCase())) {
+    return trimmedEmail;
+  }
+  
+  // Common typo patterns to fix
+  const typoCorrections: { [key: string]: string } = {
+    '.con': '.com',      // con -> com
+    '.cmo': '.com',      // cmo -> com
+    '.comn': '.com',     // comn -> com
+    '.comm': '.com',     // comm -> com
+    '.coom': '.com',     // coom -> com
+    '.com,': '.com',     // trailing comma
+    '.con,': '.com',     // con with comma
+    '.cmo,': '.com',     // cmo with comma
+    '.or': '.org',       // or -> org
+    '.ogr': '.org',      // ogr -> org
+    '.net,': '.net',     // trailing comma
+    '.ne': '.net',       // ne -> net
+  };
+  
+  // Check if TLD matches a typo pattern
+  const correctedTLD = typoCorrections[tld.toLowerCase()];
+  if (correctedTLD) {
+    return `${localPart}@${baseDomain}${correctedTLD}`;
+  }
+  
+  // Check if TLD with trailing comma matches a typo
+  if (tld.endsWith(',')) {
+    const tldWithoutComma = tld.slice(0, -1);
+    const correctedTLD = typoCorrections[tldWithoutComma.toLowerCase()];
+    if (correctedTLD) {
+      return `${localPart}@${baseDomain}${correctedTLD}`;
+    }
+  }
+  
+  return trimmedEmail;
+}
+
+/**
  * Validates email format
  * Checks for common email format issues
  */
@@ -172,9 +242,17 @@ export function validateAndCleanRow(
   // Clean all fields (remove unnecessary quotes)
   const cleanedRow = row.map(field => cleanField(field));
   
-  // Validate email field
+  // Auto-correct and validate email field
   if (emailColumnIndex >= 0 && emailColumnIndex < cleanedRow.length) {
-    const email = cleanedRow[emailColumnIndex];
+    let email = cleanedRow[emailColumnIndex];
+    
+    // Auto-correct common TLD typos
+    email = autoCorrectEmailDomain(email);
+    
+    // Update the cleaned row with corrected email
+    cleanedRow[emailColumnIndex] = email;
+    
+    // Validate email after correction
     if (!isValidEmail(email)) {
       return null; // Invalid email, reject row
     }
